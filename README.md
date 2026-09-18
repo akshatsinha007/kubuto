@@ -6,7 +6,7 @@
 
 **A CLI that tells you what's actually deployed in your cluster, and how far behind it is.**
 
-`kubuto scan` walks your Helm releases, ArgoCD `Application`s, and Flux `HelmRelease`s in one pass and reports each chart's current vs. latest upstream version — no separate `argocd`/`flux`/`helm` scripts glued together by hand.
+`kubuto scan` walks your Helm releases, ArgoCD `Application`s, and Flux `HelmRelease`s in one pass and reports each chart's current vs. latest upstream version.
 
 ```
 $ kubuto scan --all
