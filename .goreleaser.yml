@@ -1,0 +1,59 @@
+# GoReleaser config for kubuto. Targets GoReleaser v2 (schema validated
+# locally against the actual installed version before this file was
+# committed — see the commit message for the exact version).
+version: 2
+
+builds:
+  - id: kubuto
+    main: ./cmd/kubuto
+    binary: kubuto
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/akshatsinha007/kubuto/cmd.Version={{.Version}}
+
+archives:
+  - id: kubuto-archive
+    ids:
+      - kubuto
+    name_template: "kubuto_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: git
+  filters:
+    exclude:
+      - "^test:"
+      - "^chore:"
+
+# `brews:` is soft-deprecated as of GoReleaser v2.10 in favor of
+# `homebrew_casks:`, but deliberately kept here: casks are for macOS
+# .app/GUI bundles (code-signing/notarization/quarantine-removal
+# concerns) and Homebrew Casks don't exist on Linux at all — the wrong
+# shape for a plain cross-platform CLI binary. `goreleaser check` still
+# validates this as correct, functional config (a warning, not an
+# error) on v2.18.2. Revisit only if GoReleaser removes `brews:` outright
+# in a future major version.
+brews:
+  - name: kubuto
+    repository:
+      owner: akshatsinha007
+      name: homebrew-kubuto
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/akshatsinha007/kubuto"
+    description: "CLI for Kubernetes Helm/GitOps chart version compatibility checks"
+    license: "Apache-2.0"
+    install: |
+      bin.install "kubuto"
+    test: |
+      system "#{bin}/kubuto --version"

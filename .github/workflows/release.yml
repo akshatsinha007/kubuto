@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.3"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Must be created manually in this repo's Settings -> Secrets ->
+          # Actions before a tag push can successfully publish the
+          # Homebrew tap: a Personal Access Token with `repo` scope (or
+          # fine-grained "Contents: read and write" on
+          # akshatsinha007/homebrew-kubuto specifically), belonging to an
+          # account with push access to that tap repo. The default
+          # GITHUB_TOKEN above only has permission to write to *this*
+          # repo's own releases, not to a separate tap repo.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

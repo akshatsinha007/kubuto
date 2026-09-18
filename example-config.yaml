@@ -1,0 +1,39 @@
+# Example Kubuto configuration with batch size setting
+cluster:
+  timeout: 30s
+  # Path to kubeconfig file. Defaults to $HOME/.kube/config if not specified
+  kubeconfig: ""
+  context: ""
+
+scanning:
+  types:
+    helm: true
+    images: true
+    argocd: false
+    flux: false
+  concurrency: 10
+  timeout: 60s
+  batch_size: 5  # Default batch size of 5 scanners at a time
+  namespaces:
+    include: []
+    exclude: []
+
+engine:
+  url: "http://localhost:8080"
+  timeout: 30s
+  api_key: ""
+
+cache:
+  enabled: true
+  directory: "~/.kubuto/cache"
+  ttl: 24h
+  max_size: "500MB"
+
+output:
+  format: "table"
+  show_progress: true
+  colors: "auto"
+
+logging:
+  level: "info"
+  format: "text"

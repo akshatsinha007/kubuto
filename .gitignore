@@ -1,0 +1,25 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+
+# Kubuto binary (root-level build output only — anchored so it doesn't
+# also match the cmd/kubuto/ *source* directory, which it silently did
+# for this repo's entire history until this fix)
+/kubuto
+bin/
+.DS_Store
+
+# GoReleaser local build/snapshot output
+dist/
