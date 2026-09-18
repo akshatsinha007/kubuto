@@ -1,8 +1,8 @@
 # kubuto
 
 [![CI](https://github.com/akshatsinha007/kubuto/actions/workflows/ci.yml/badge.svg)](https://github.com/akshatsinha007/kubuto/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/akshatsinha007/kubuto)](https://github.com/akshatsinha007/kubuto/releases)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/akshatsinha007/kubuto)
+[![Release](https://img.shields.io/github/v/release/akshatsinha007/kubuto)](https://github.com/akshatsinha007/kubuto/releases)
 [![License](https://img.shields.io/github/license/akshatsinha007/kubuto)](LICENSE)
 
 **A CLI that tells you what's actually deployed in your cluster, and how far behind it is.**
