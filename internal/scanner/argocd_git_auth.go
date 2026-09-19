@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/akshatsinha007/kubuto/internal/client"
+	"github.com/akshatsinha007/kubuto/internal/config"
 )
 
 // resolveGitAuth picks the best HTTPS credentials available for `repoURL`
@@ -14,10 +15,21 @@ import (
 //     (User explicitly bound creds to *this* repo in ArgoCD.)
 //  2. Longest-prefix `secret-type=repo-creds` template with HTTPS creds.
 //     (User said "every repo under this prefix uses these creds".)
-//  3. `opts.GitOpsConfigs[]` whose `Repo` matches `repoURL` — kubuto's
-//     manual override knob, useful for repos ArgoCD itself doesn't know
-//     about.
-//  4. Anonymous (zero-value GitAuth) — public repos work without any
+//  3. Longest-prefix match against `opts.GitOpsConfigs[]` (the
+//     `scanning.argocd.gitops` config knob, or `Repo`/`URL` set
+//     manually) — kubuto's manual override, useful for repos ArgoCD
+//     itself doesn't track, or where the ArgoCD secret it does have
+//     carries no usable credential (common: Devtron/ArgoCD registers
+//     one `repository` secret per generated app repo but the actual
+//     auth lives outside ArgoCD entirely, e.g. injected by an
+//     orchestrator at a different layer). Matched by prefix, same rule
+//     as pass 2, so one entry can cover an entire git host/group
+//     instead of requiring one entry per repo.
+//  4. `opts.DefaultGitAuth` — a single global credential from
+//     `--git-token`/`--git-username`/`--git-password` (or their config
+//     equivalents). Absolute last resort before anonymous: covers repos
+//     with no secret and no per-repo/per-prefix override at all.
+//  5. Anonymous (zero-value GitAuth) — public repos work without any
 //     header. The HTTP layer leaves `Authorization` unset.
 //
 // SSH-only / GitHub-App-only secrets are deliberately ignored: kubuto's
@@ -80,16 +92,53 @@ func (s *ArgoCDScanner) resolveGitAuth(repoURL string, secrets []repoSecret, opt
 		return bestCreds
 	}
 
-	// Pass 3: explicit `scanning.gitops` override from kubuto config.
+	// Pass 3: longest-prefix match against `scanning.gitops` overrides.
+	bestPrefixLen = -1
+	var bestManual client.GitAuth
 	for _, gc := range opts.GitOpsConfigs {
-		if gc.Repo == "" || !client.ReposMatch(gc.Repo, repoURL) {
+		matchKey := gc.Repo
+		if matchKey == "" {
+			matchKey = gc.URL
+		}
+		if matchKey == "" {
 			continue
 		}
-		if gc.Token != "" {
-			return client.GitAuth{Token: gc.Token}
+		normalizedGC := client.NormalizeRepoURL(matchKey)
+		if normalizedGC != normalizedURL && !hasURLPrefix(normalizedURL, normalizedGC) {
+			continue
+		}
+		if len(normalizedGC) <= bestPrefixLen {
+			continue
+		}
+		if a := credsFromGitOpsConfig(gc); !a.IsZero() {
+			bestPrefixLen = len(normalizedGC)
+			bestManual = a
 		}
 	}
+	if bestPrefixLen >= 0 {
+		return bestManual
+	}
 
+	// Pass 4: global default (--git-token / --git-username / --git-password).
+	if !opts.DefaultGitAuth.IsZero() {
+		return opts.DefaultGitAuth
+	}
+
+	return client.GitAuth{}
+}
+
+// credsFromGitOpsConfig materialises HTTPS credentials from a manual
+// `scanning.gitops` entry. Token takes precedence when both a token
+// and username/password are set — it's the more common shape for this
+// config knob (a single PAT), and picking one deterministic winner
+// beats silently combining them.
+func credsFromGitOpsConfig(gc config.GitOpsRepo) client.GitAuth {
+	if gc.Token != "" {
+		return client.GitAuth{Token: gc.Token}
+	}
+	if gc.Username != "" || gc.Password != "" {
+		return client.GitAuth{Username: gc.Username, Password: gc.Password}
+	}
 	return client.GitAuth{}
 }
 

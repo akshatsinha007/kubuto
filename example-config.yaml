@@ -17,6 +17,25 @@ scanning:
   namespaces:
     include: []
     exclude: []
+  argocd:
+    # Manual git credential overrides, used when resolving Chart.yaml
+    # for a git-source ArgoCD Application. kubuto tries, in order: (1)
+    # an exact-match ArgoCD `secret-type=repository` secret, (2) a
+    # longest-prefix `secret-type=repo-creds` secret, (3) the entries
+    # below (also matched by longest prefix, so one entry can cover
+    # every repo under a git host/group instead of listing each repo),
+    # (4) --git-token/--git-username/--git-password if set, (5) anonymous.
+    #
+    # Use this when ArgoCD's own repo secrets exist but carry no usable
+    # credential (common when a GitOps controller injects auth outside
+    # ArgoCD's native secret shape), or for repos ArgoCD doesn't track
+    # at all.
+    gitops:
+      - repo: "https://gitlab.com/my-org/my-gitops-group"  # matches every repo nested under it
+        token: ""      # PAT / bearer token — takes precedence over username/password below
+        # username: ""
+        # password: ""
+        # branch: ""   # override the branch Chart.yaml is fetched from (falls back to the Application's targetRevision)
 
 engine:
   url: "http://localhost:8080"

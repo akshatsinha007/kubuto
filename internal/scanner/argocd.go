@@ -97,16 +97,13 @@ func (s *ArgoCDScanner) Scan(ctx context.Context, opts ScanOptions) ([]types.Res
 	// duplicate credentials in `scanning.gitops` to get Current/Latest
 	// for git-source ArgoCD apps.
 	//
-	// `opts.GitOpsConfigs` is still honoured as a manual override / for
-	// repos ArgoCD itself doesn't track (e.g. an unrelated public mirror
-	// the user wants kubuto to follow). The first such entry's Token
-	// becomes the default fallback when no per-repo secret matches.
-	var defaultToken string
-	if len(opts.GitOpsConfigs) > 0 {
-		defaultToken = opts.GitOpsConfigs[0].Token
-	}
+	// `opts.GitOpsConfigs` (per-repo/per-prefix) and `opts.DefaultGitAuth`
+	// (global --git-token/--git-username/--git-password) are both
+	// honoured too, as further fallback tiers inside resolveGitAuth —
+	// every fetch call passes its own per-repo `auth`, computed there,
+	// so the client instance itself needs no credential of its own.
 	if s.gitClient == nil {
-		s.gitClient = client.NewGitClient(defaultToken)
+		s.gitClient = client.NewGitClient("")
 	}
 
 	namespaces := resolveTargetNamespaces(opts)
@@ -141,18 +138,30 @@ func (s *ArgoCDScanner) Scan(ctx context.Context, opts ScanOptions) ([]types.Res
 			s.logger.V(1).Info("Failed to list ArgoCD applications", "scope", scope, "error", err)
 			continue
 		}
-		for _, app := range apps {
-			// processApplication may return multiple resources when
-			// the app is a git-source umbrella chart with several
-			// dependencies; each dependency surfaces as its own scan
-			// row so the user can see per-chart compat verdicts
-			// instead of a single aggregate.
+		// processApplication does real network work for git-source apps
+		// (a Chart.yaml fetch against whatever git host the Application
+		// points at) — run up to scanConcurrency of them at once rather
+		// than one Application at a time; a hub with thousands of
+		// Applications in one namespace made this the dominant cost of
+		// a scan. processApplication may return multiple resources
+		// when the app is a git-source umbrella chart with several
+		// dependencies; each dependency surfaces as its own scan row
+		// so the user can see per-chart compat verdicts instead of a
+		// single aggregate.
+		type appResult struct {
+			resources []types.Resource
+			err       error
+		}
+		results := parallelMap(apps, scanConcurrency, func(app unstructured.Unstructured) appResult {
 			appRes, err := s.processApplication(ctx, app, opts, repoSecrets)
-			if err != nil {
-				s.logger.V(1).Info("Error processing application", "app", app.GetName(), "error", err)
+			return appResult{resources: appRes, err: err}
+		})
+		for i, r := range results {
+			if r.err != nil {
+				s.logger.V(1).Info("Error processing application", "app", apps[i].GetName(), "error", r.err)
 				continue
 			}
-			resources = append(resources, appRes...)
+			resources = append(resources, r.resources...)
 		}
 	}
 

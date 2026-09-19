@@ -9,9 +9,11 @@ import (
 	"github.com/akshatsinha007/kubuto/internal/config"
 )
 
-// TestResolveGitAuth_PreferenceOrder asserts the four-tier preference
+// TestResolveGitAuth_PreferenceOrder asserts the top of the preference
 // chain documented on `resolveGitAuth`: exact-repository secret beats
 // repo-creds prefix beats opts.GitOpsConfigs override beats anonymous.
+// (The DefaultGitAuth tier between GitOpsConfigs and anonymous is
+// covered separately by TestResolveGitAuth_DefaultGitAuthIsLastResort.)
 // Each row keeps the secret universe identical so we're isolating the
 // one knob that shifts the resolution tier.
 func TestResolveGitAuth_PreferenceOrder(t *testing.T) {
@@ -122,6 +124,102 @@ func TestResolveGitAuth_LongestPrefixWins(t *testing.T) {
 	want := client.GitAuth{Username: "long-user", Password: "long-pat"}
 	if got != want {
 		t.Fatalf("longest prefix did not win: got %+v want %+v", got, want)
+	}
+}
+
+// TestResolveGitAuth_ManualOverridePrefixMatch guards the real-world
+// case this tier exists for: a GitOps setup with hundreds/thousands of
+// per-app repos under one host/group, none of whose ArgoCD secrets
+// carry usable credentials, but where a single PAT is valid for every
+// repo under that group. One `scanning.argocd.gitops` entry naming the
+// group must resolve every repo nested under it, not just an
+// exact-string match.
+func TestResolveGitAuth_ManualOverridePrefixMatch(t *testing.T) {
+	scanner := &ArgoCDScanner{}
+	repoURL := "https://gitlab.com/devtron-prod-gitops/prometheus-rule-central.git"
+
+	opts := ScanOptions{GitOpsConfigs: []config.GitOpsRepo{
+		{Repo: "https://gitlab.com/devtron-prod-gitops", Token: "group-pat"},
+	}}
+
+	got := scanner.resolveGitAuth(repoURL, nil, opts)
+	want := client.GitAuth{Token: "group-pat"}
+	if got != want {
+		t.Fatalf("group-prefix override did not match nested repo: got %+v want %+v", got, want)
+	}
+}
+
+// TestResolveGitAuth_ManualOverrideUsernamePassword covers the
+// Username/Password shape of a manual override (not every override is
+// a bearer token — GitLab deploy tokens, Bitbucket app passwords, etc.
+// use Basic auth), and that it's only used when Token is empty.
+func TestResolveGitAuth_ManualOverrideUsernamePassword(t *testing.T) {
+	scanner := &ArgoCDScanner{}
+	repoURL := "https://gitlab.com/acme/svc"
+
+	basicOnly := ScanOptions{GitOpsConfigs: []config.GitOpsRepo{
+		{Repo: repoURL, Username: "deploy-token-user", Password: "deploy-token-pw"},
+	}}
+	got := scanner.resolveGitAuth(repoURL, nil, basicOnly)
+	want := client.GitAuth{Username: "deploy-token-user", Password: "deploy-token-pw"}
+	if got != want {
+		t.Fatalf("username/password override not applied: got %+v want %+v", got, want)
+	}
+
+	tokenWins := ScanOptions{GitOpsConfigs: []config.GitOpsRepo{
+		{Repo: repoURL, Token: "the-token", Username: "ignored", Password: "ignored"},
+	}}
+	got = scanner.resolveGitAuth(repoURL, nil, tokenWins)
+	want = client.GitAuth{Token: "the-token"}
+	if got != want {
+		t.Fatalf("token should win over username/password when both set: got %+v want %+v", got, want)
+	}
+}
+
+// TestResolveGitAuth_ManualOverrideLongestPrefixWins mirrors the
+// repo-creds longest-prefix guarantee for the manual-override tier: a
+// more specific entry must win over a broader group-level one.
+func TestResolveGitAuth_ManualOverrideLongestPrefixWins(t *testing.T) {
+	scanner := &ArgoCDScanner{}
+	repoURL := "https://gitlab.com/acme/critical-service.git"
+
+	opts := ScanOptions{GitOpsConfigs: []config.GitOpsRepo{
+		{Repo: "https://gitlab.com/acme", Token: "group-pat"},
+		{Repo: "https://gitlab.com/acme/critical-service", Token: "specific-pat"},
+	}}
+
+	got := scanner.resolveGitAuth(repoURL, nil, opts)
+	want := client.GitAuth{Token: "specific-pat"}
+	if got != want {
+		t.Fatalf("more specific override should win: got %+v want %+v", got, want)
+	}
+}
+
+// TestResolveGitAuth_DefaultGitAuthIsLastResort asserts opts.DefaultGitAuth
+// (--git-token/--git-username/--git-password) only kicks in once every
+// secret-based and GitOpsConfigs-based tier has missed, and that it
+// still loses to a matching GitOpsConfigs entry when one exists.
+func TestResolveGitAuth_DefaultGitAuthIsLastResort(t *testing.T) {
+	scanner := &ArgoCDScanner{}
+	repoURL := "https://gitlab.com/acme/svc.git"
+
+	// No secrets, no GitOpsConfigs match → DefaultGitAuth wins over anonymous.
+	got := scanner.resolveGitAuth(repoURL, nil, ScanOptions{
+		DefaultGitAuth: client.GitAuth{Token: "global-fallback"},
+	})
+	want := client.GitAuth{Token: "global-fallback"}
+	if got != want {
+		t.Fatalf("DefaultGitAuth should win over anonymous: got %+v want %+v", got, want)
+	}
+
+	// A matching GitOpsConfigs entry still beats DefaultGitAuth.
+	got = scanner.resolveGitAuth(repoURL, nil, ScanOptions{
+		DefaultGitAuth: client.GitAuth{Token: "global-fallback"},
+		GitOpsConfigs:  []config.GitOpsRepo{{Repo: repoURL, Token: "specific-override"}},
+	})
+	want = client.GitAuth{Token: "specific-override"}
+	if got != want {
+		t.Fatalf("specific GitOpsConfigs entry should beat DefaultGitAuth: got %+v want %+v", got, want)
 	}
 }
 

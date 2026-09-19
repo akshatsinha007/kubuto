@@ -67,6 +67,7 @@ func (s *HelmScanner) Scan(ctx context.Context, opts ScanOptions) ([]types.Resou
 			return nil, fmt.Errorf("failed to list helm secrets in namespace %s: %w", ns, err)
 		}
 
+		var deployed []*release.Release
 		for _, secret := range secrets {
 			rel, err := s.decodeRelease(secret.Data["release"])
 			if err != nil {
@@ -78,9 +79,16 @@ func (s *HelmScanner) Scan(ctx context.Context, opts ScanOptions) ([]types.Resou
 				continue
 			}
 
-			res := s.processRelease(ctx, rel, opts)
-			resources = append(resources, res)
+			deployed = append(deployed, rel)
 		}
+
+		// processRelease does real network lookups (ArtifactHub, chart
+		// repo index.yaml) — run up to scanConcurrency of them at once
+		// instead of one release at a time. Decoding/status-filtering
+		// above stays sequential since it's cheap and purely local.
+		resources = append(resources, parallelMap(deployed, scanConcurrency, func(rel *release.Release) types.Resource {
+			return s.processRelease(ctx, rel, opts)
+		})...)
 	}
 
 	return resources, nil

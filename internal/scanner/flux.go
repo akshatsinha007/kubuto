@@ -164,12 +164,14 @@ func (s *FluxScanner) Scan(ctx context.Context, opts ScanOptions) ([]types.Resou
 		// the Flux-only "Kind:ns/name" placeholder. Without this fix
 		// the LatestVersion column would always be blank for
 		// HelmRelease rows because index.yaml lookup needs a real
-		// http(s) URL.
-		for _, release := range releases {
+		// http(s) URL. Both resolveSourceRef (may GET a GitRepository
+		// object) and processHelmRelease (index.yaml lookup) are real
+		// network-bound work — run up to scanConcurrency releases at
+		// once instead of one at a time.
+		resources = append(resources, parallelMap(releases, scanConcurrency, func(release unstructured.Unstructured) types.Resource {
 			repoURL := s.resolveSourceRef(ctx, release, repoMap)
-			res := s.processHelmRelease(ctx, release, opts, repoURL)
-			resources = append(resources, res)
-		}
+			return s.processHelmRelease(ctx, release, opts, repoURL)
+		})...)
 	}
 
 	if len(allErrors) > 0 {

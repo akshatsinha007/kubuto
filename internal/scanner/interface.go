@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/akshatsinha007/kubuto/internal/cache"
+	"github.com/akshatsinha007/kubuto/internal/client"
 	"github.com/akshatsinha007/kubuto/internal/config"
 	"github.com/akshatsinha007/kubuto/pkg/types"
 	"github.com/go-logr/logr"
@@ -69,6 +70,14 @@ type ScanOptions struct {
 	GitOpsNamespace string // override default namespace
 	K8sVersion      string
 	GitOpsConfigs   []config.GitOpsRepo
+	// DefaultGitAuth is a global git credential (from --git-token /
+	// --git-username / --git-password or their config-file equivalents)
+	// used as the absolute last resort when resolving auth for a git
+	// source: after ArgoCD's own repository/repo-creds secrets and any
+	// per-repo/per-prefix `scanning.argocd.gitops` entry have all missed.
+	// Lets a user supply one credential (e.g. a single GitLab group PAT)
+	// that covers every repo kubuto can't otherwise authenticate to.
+	DefaultGitAuth client.GitAuth
 }
 
 // resolveTargetNamespaces resolves the effective set of namespaces a

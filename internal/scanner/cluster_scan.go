@@ -33,6 +33,7 @@ type ClusterScanParams struct {
 	ScanTypes       []string
 	K8sVersion      string
 	Version         string // kubuto's own build version, stamped into ScanResult.Metadata.KubutoVersion
+	DefaultGitAuth  client.GitAuth
 }
 
 // RunClusterScan creates scanners, validates them, and executes a cluster scan.
@@ -144,6 +145,7 @@ func RunClusterScan(ctx context.Context, params ClusterScanParams) (*types.ScanR
 		GitOpsNamespace: params.GitOpsNamespace,
 		K8sVersion:      params.K8sVersion,
 		GitOpsConfigs:   gitopsConfigs,
+		DefaultGitAuth:  params.DefaultGitAuth,
 	}
 
 	result, err := coordinator.ExecuteScans(ctx, scanOpts)

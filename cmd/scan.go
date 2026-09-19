@@ -74,6 +74,17 @@ Examples:
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		allFlag, _ := cmd.Flags().GetBool("all")
 
+		// Global git credential fallback — used only when a git source's
+		// repo has no matching ArgoCD secret and no per-repo/per-prefix
+		// `scanning.argocd.gitops` entry either. Covers the common case
+		// of one PAT/token that's valid for every repo under a git host
+		// or group (e.g. a whole GitLab group of GitOps-generated repos)
+		// without requiring one config entry per repo.
+		gitToken, _ := cmd.Flags().GetString("git-token")
+		gitUsername, _ := cmd.Flags().GetString("git-username")
+		gitPassword, _ := cmd.Flags().GetString("git-password")
+		defaultGitAuth := client.GitAuth{Token: gitToken, Username: gitUsername, Password: gitPassword}
+
 		// `--all` is a convenience for the dominant use case
 		// "tell me everything that has a current↔latest mapping". It is
 		// strictly a *superset* in the chart dimension (helm + flux +
@@ -139,6 +150,7 @@ Examples:
 			ScanTypes:       scanTypes,
 			K8sVersion:      k8sVersion,
 			Version:         Version,
+			DefaultGitAuth:  defaultGitAuth,
 		})
 		if err != nil {
 			return err
@@ -212,4 +224,7 @@ func init() {
 	scanCmd.Flags().String("gitops-namespace", "", "Constrain GitOps scan to a single namespace (overrides --namespace for the GitOps scanner only)")
 	scanCmd.Flags().String("k8s-version", "", "Override auto-detected K8s version")
 	scanCmd.Flags().String("destination-cluster", "", "Restrict ArgoCD-sourced rows to one destination cluster (matches spec.destination.server/.name or .namespace)")
+	scanCmd.Flags().String("git-token", "", "Fallback git credential (bearer/PAT) for git-source repos with no matching ArgoCD secret or scanning.argocd.gitops entry")
+	scanCmd.Flags().String("git-username", "", "Fallback git username, paired with --git-password (used only if --git-token is empty)")
+	scanCmd.Flags().String("git-password", "", "Fallback git password/PAT, paired with --git-username (used only if --git-token is empty)")
 }

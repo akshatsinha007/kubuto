@@ -20,6 +20,8 @@ type GitOpsRepo struct {
 	Revision string `mapstructure:"revision" yaml:"revision"`
 	Path     string `mapstructure:"path" yaml:"path"`
 	Token    string `mapstructure:"token" yaml:"token"`
+	Username string `mapstructure:"username" yaml:"username"`
+	Password string `mapstructure:"password" yaml:"password"`
 	Repo     string `mapstructure:"repo" yaml:"repo"`
 	Branch   string `mapstructure:"branch" yaml:"branch"`
 }
